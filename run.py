@@ -208,6 +208,63 @@ def generate_app(
             return synthesis_engines[core_version]
         raise HTTPException(status_code=422, detail="不明なバージョンです")
 
+    @app.get(
+        "/simple_synthesis",
+        response_model=FileResponse,
+        responses={
+            200: {
+                "content": {
+                    "audio/wav": {"schema": {"type": "string", "format": "binary"}}
+                },
+            }
+        },
+        tags=["音声合成"],
+        summary="クエリを経由せずに音声合成する",
+    )
+    def simple_synthesis(
+        text: str,
+        speaker: int,
+        enable_interrogative_upspeak: bool = Query(  # noqa: B008
+            default=True,
+            description="疑問系のテキストが与えられたら語尾を自動調整する",
+        ),
+        core_version: Optional[str] = None
+    ):
+        """
+        クエリを経由せずに一発で音声合成を行います。audio_query と synthesis を一括で実行するのと同様の結果を得ます。
+        """
+        engine = get_engine(core_version)
+        accent_phrases = engine.create_accent_phrases(text, speaker_id=speaker)
+        query = AudioQuery(
+            accent_phrases=accent_phrases,
+            speedScale=1,
+            pitchScale=0,
+            intonationScale=1,
+            volumeScale=1,
+            prePhonemeLength=0.1,
+            postPhonemeLength=0.1,
+            outputSamplingRate=default_sampling_rate,
+            outputStereo=False,
+            kana=create_kana(accent_phrases),
+        )
+        enable_interrogative_upspeak=True
+        wave = engine.synthesis(
+            query=query,
+            speaker_id=speaker,
+            enable_interrogative_upspeak=enable_interrogative_upspeak,
+        )
+
+        with NamedTemporaryFile(delete=False) as f:
+            soundfile.write(
+                file=f, data=wave, samplerate=query.outputSamplingRate, format="WAV"
+            )
+
+        return FileResponse(
+            f.name,
+            media_type="audio/wav",
+            background=BackgroundTask(delete_file, f.name),
+        )
+
     @app.post(
         "/audio_query",
         response_model=AudioQuery,
