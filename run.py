@@ -210,7 +210,7 @@ def generate_app(
 
     @app.get(
         "/simple_synthesis",
-        response_model=FileResponse,
+        response_class=FileResponse,
         responses={
             200: {
                 "content": {
