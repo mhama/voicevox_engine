@@ -214,7 +214,7 @@ def generate_app(
         responses={
             200: {
                 "content": {
-                    "audio/wav": {"schema": {"type": "string", "format": "binary"}}
+                    "audio/mpeg": {"schema": {"type": "string", "format": "binary"}}
                 },
             }
         },
@@ -256,12 +256,12 @@ def generate_app(
 
         with NamedTemporaryFile(delete=False) as f:
             soundfile.write(
-                file=f, data=wave, samplerate=query.outputSamplingRate, format="WAV"
+                file=f, data=wave, samplerate=query.outputSamplingRate, format="MP3"
             )
 
         return FileResponse(
             f.name,
-            media_type="audio/wav",
+            media_type="audio/mpeg",
             background=BackgroundTask(delete_file, f.name),
         )
 
