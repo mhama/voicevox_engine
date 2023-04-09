@@ -299,3 +299,34 @@ CMD [ "gosu", "user", "/opt/python/bin/python3", "./run.py", "--voicelib_dir", "
 # Enable use_gpu
 FROM runtime-env AS runtime-nvidia-env
 CMD [ "gosu", "user", "/opt/python/bin/python3", "./run.py", "--use_gpu", "--voicelib_dir", "/opt/voicevox_core/", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
+
+
+# Runtime for AWS lambda
+FROM runtime-env AS aws-lambda-runtime-env
+WORKDIR /opt/voicevox_engine
+
+RUN <<EOF
+    # Install requirements
+    gosu user /opt/python/bin/pip3 install awslambdaric
+EOF
+
+# Create container start shell
+COPY --chmod=775 <<EOF /entrypoint.sh
+#!/bin/bash
+set -eux
+
+# Display README for engine
+cat /opt/voicevox_engine/README.md > /dev/stderr
+
+
+exec "/opt/python/bin/python3 -m awslambdaric \$@" &
+
+
+gosu user /opt/python/bin/python3 ./run.py --voicelib_dir /opt/voicevox_core/ --runtime_dir /opt/onnxruntime/lib--host 0.0.0.0
+EOF
+
+ADD ./awslambda.py /opt/voicevox_engine/
+
+ENTRYPOINT [ "/entrypoint.sh"  ]
+CMD "awslambda.handler"
+
