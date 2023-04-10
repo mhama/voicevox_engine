@@ -204,7 +204,7 @@ RUN <<EOF
     rm -rf /var/lib/apt/lists/*
 
     # Create a general user
-    useradd --create-home user
+    #useradd --create-home vvuser
 EOF
 
 # Copy python env
@@ -214,7 +214,7 @@ COPY --from=compile-python-env /opt/python /opt/python
 ADD ./requirements.txt /tmp/
 RUN <<EOF
     # Install requirements
-    gosu user /opt/python/bin/pip3 install -r /tmp/requirements.txt
+    /opt/python/bin/pip3 install -r /tmp/requirements.txt
 EOF
 
 # Copy VOICEVOX Core release
@@ -246,10 +246,14 @@ RUN <<EOF
 
     # Define temporary env vars
     # /home/user/.local/bin is required to use the commands installed by pip
-    export PATH="/home/user/.local/bin:${PATH:-}"
+    export USER=`whoami`
+    export PATH="/home/$USER/.local/bin:${PATH:-}"
+    echo "$USER"
+    echo "$PATH"
 
-    gosu user /opt/python/bin/pip3 install -r /tmp/requirements-license.txt
-    gosu user /opt/python/bin/python3 generate_licenses.py > /opt/voicevox_engine/engine_manifest_assets/dependency_licenses.json
+    /opt/python/bin/python3.8 -m pip install --upgrade pip
+    /opt/python/bin/pip3 install -r /tmp/requirements-license.txt
+    /opt/python/bin/python3 generate_licenses.py > /opt/voicevox_engine/engine_manifest_assets/dependency_licenses.json
     cp /opt/voicevox_engine/engine_manifest_assets/dependency_licenses.json /opt/voicevox_engine/licenses.json
 EOF
 
@@ -261,7 +265,7 @@ RUN <<EOF
     # try 5 times, sleep 5 seconds before retry
     for i in $(seq 5); do
         EXIT_CODE=0
-        gosu user /opt/python/bin/python3 -c "import pyopenjtalk; pyopenjtalk._lazy_init()" || EXIT_CODE=$?
+        /opt/python/bin/python3 -c "import pyopenjtalk; pyopenjtalk._lazy_init()" || EXIT_CODE=$?
         if [ "$EXIT_CODE" = "0" ]; then
             break
         fi
@@ -294,11 +298,11 @@ exec "\$@"
 EOF
 
 ENTRYPOINT [ "/entrypoint.sh"  ]
-CMD [ "gosu", "user", "/opt/python/bin/python3", "./run.py", "--voicelib_dir", "/opt/voicevox_core/", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
+CMD [ "gosu", "vvuser", "/opt/python/bin/python3", "./run.py", "--voicelib_dir", "/opt/voicevox_core/", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
 
 # Enable use_gpu
 FROM runtime-env AS runtime-nvidia-env
-CMD [ "gosu", "user", "/opt/python/bin/python3", "./run.py", "--use_gpu", "--voicelib_dir", "/opt/voicevox_core/", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
+CMD [ "gosu", "vvuser", "/opt/python/bin/python3", "./run.py", "--use_gpu", "--voicelib_dir", "/opt/voicevox_core/", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
 
 
 # Runtime for AWS lambda
@@ -307,8 +311,11 @@ WORKDIR /opt/voicevox_engine
 
 RUN <<EOF
     # Install requirements
-    gosu user /opt/python/bin/pip3 install awslambdaric
+    /opt/python/bin/pip3 install awslambdaric
 EOF
+
+# let r/w access from lambda user (sbx_user****)
+RUN mkdir /tmp/voicevox_home && chmod -R 777 /tmp/voicevox_home
 
 # Create container start shell
 COPY --chmod=775 <<EOF /entrypoint.sh
@@ -318,15 +325,25 @@ set -eux
 # Display README for engine
 cat /opt/voicevox_engine/README.md > /dev/stderr
 
+# launch awslambdaric as background job
+cmd="/opt/python/bin/python3 -m awslambdaric \$@"
+echo $cmd
+nohup sh -c "\$cmd" &
 
-exec "/opt/python/bin/python3 -m awslambdaric \$@" &
+#exec gosu vvuser /opt/python/bin/python3 ./run.py --voicelib_dir /opt/voicevox_core/ --runtime_dir /opt/onnxruntime/lib--host 0.0.0.0
+# without gosu. lambda says:
+#   error: failed switching to "user": unable to find user user: no matching entries in passwd file
+whoami
+pwd
 
+export HOME="/tmp/voicevox_home"
 
-gosu user /opt/python/bin/python3 ./run.py --voicelib_dir /opt/voicevox_core/ --runtime_dir /opt/onnxruntime/lib--host 0.0.0.0
+# launch voicevox
+/opt/python/bin/python3 ./run.py --voicelib_dir /opt/voicevox_core/ --runtime_dir /opt/onnxruntime/lib --host 0.0.0.0
 EOF
 
 ADD ./awslambda.py /opt/voicevox_engine/
 
 ENTRYPOINT [ "/entrypoint.sh"  ]
-CMD "awslambda.handler"
+CMD [ "awslambda.handler" ]
 

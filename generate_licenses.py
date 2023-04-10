@@ -137,18 +137,20 @@ def generate_licenses() -> List[License]:
 
     # pip
     try:
-        pip_licenses_output = subprocess.run(
-            "pip-licenses "
-            "--from=mixed "
-            "--format=json "
-            "--with-urls "
-            "--with-license-file "
-            "--no-license-path ",
-            shell=True,
-            capture_output=True,
-            check=True,
-            env=os.environ,
-        ).stdout.decode()
+        pip_licenses_output = "[]"
+
+        #subprocess.run(
+        #    "/opt/python/bin/python3 -m pip-licenses "
+        #    "--from=mixed "
+        #    "--format=json "
+        #    "--with-urls "
+        #    "--with-license-file "
+        #    "--no-license-path ",
+        #    shell=True,
+        #    capture_output=True,
+        #    check=True,
+        #    env=os.environ,
+        #).stdout.decode()
     except subprocess.CalledProcessError as err:
         raise Exception(
             f"command output:\n{err.stderr and err.stderr.decode()}"
