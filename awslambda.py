@@ -5,20 +5,21 @@ import requests
 from base64 import b64encode,b64decode
 
 # wait until the server starts.
-def wait_till_ready(port, n=10, time_out=0.5):
-    for i in range(n):
+def wait_till_ready(port, timeoutsec):
+    interval = 0.5
+    for i in range(round(timeoutsec/interval)):
         try:
             requests.get("http://127.0.0.1:" + str(port))
             return
         except requests.exceptions.ConnectionError:
-            time.sleep(time_out)
+            time.sleep(interval)
 
     raise Exception("failed to connect to the server")
 
 # handler for non-proxy ingegration
 def handler(event, context):
     print(event)
-    wait_till_ready(50021, 30, 0.5)
+    wait_till_ready(50021, 30)
     url = 'http://127.0.0.1:50021/simple_synthesis'
     params = {
             'text': event.get('text', 'hello'),
